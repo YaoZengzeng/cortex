@@ -77,17 +77,20 @@ type Config struct {
 // RegisterFlags registers flag.
 func (c *Config) RegisterFlags(f *flag.FlagSet) {
 	c.Server.MetricsNamespace = "cortex"
+	// 默认加载所有的target
 	c.Target = All
 	c.Server.ExcludeRequestInLog = true
 	f.Var(&c.Target, "target", "target module (default All)")
 	f.BoolVar(&c.AuthEnabled, "auth.enabled", true, "Set to false to disable auth.")
 	f.BoolVar(&c.PrintConfig, "print.config", false, "Print the config and exit.")
 
+	// 注册每个组件的flag
 	c.Server.RegisterFlags(f)
 	c.Distributor.RegisterFlags(f)
 	c.Querier.RegisterFlags(f)
 	c.IngesterClient.RegisterFlags(f)
 	c.Ingester.RegisterFlags(f)
+	// 注册Store的flags
 	c.Storage.RegisterFlags(f)
 	c.ChunkStore.RegisterFlags(f)
 	c.Schema.RegisterFlags(f)
@@ -183,18 +186,21 @@ func (t *Cortex) setupAuthMiddleware(cfg *Config) {
 
 func (t *Cortex) init(cfg *Config, m moduleName) error {
 	// initialize all of our dependencies first
+	// 首先初始化我们所有的依赖
 	for _, dep := range orderedDeps(m) {
 		if err := t.initModule(cfg, dep); err != nil {
 			return err
 		}
 	}
 	// lastly, initialize the requested module
+	// 最后初始化我们请求的module
 	return t.initModule(cfg, m)
 }
 
 func (t *Cortex) initModule(cfg *Config, m moduleName) error {
 	level.Info(util.Logger).Log("msg", "initialising", "module", m)
 	if modules[m].init != nil {
+		// 初始化module
 		if err := modules[m].init(t, cfg); err != nil {
 			return errors.Wrap(err, fmt.Sprintf("error initialising module: %s", m))
 		}
@@ -203,6 +209,7 @@ func (t *Cortex) initModule(cfg *Config, m moduleName) error {
 }
 
 // Run starts Cortex running, and blocks until a signal is received.
+// Run启动Cortex的运行，并且阻塞直到接收到一个signal
 func (t *Cortex) Run() error {
 	return t.server.Run()
 }
@@ -228,6 +235,7 @@ func (t *Cortex) stopModule(m moduleName) {
 }
 
 // listDeps recursively gets a list of dependencies for a passed moduleName
+// 递归地获取参数中的m依赖的一系列modules
 func listDeps(m moduleName) []moduleName {
 	deps := modules[m].deps
 	for _, d := range modules[m].deps {
@@ -237,10 +245,12 @@ func listDeps(m moduleName) []moduleName {
 }
 
 // orderedDeps gets a list of all dependencies ordered so that items are always after any of their dependencies.
+// orderedDeps获取所有排好序的dependencies，因此items总是在它们的dependencies之后
 func orderedDeps(m moduleName) []moduleName {
 	deps := listDeps(m)
 
 	// get a unique list of moduleNames, with a flag for whether they have been added to our result
+	// 获取一系列不同的moduleNames
 	uniq := map[moduleName]bool{}
 	for _, dep := range deps {
 		uniq[dep] = false
@@ -249,6 +259,7 @@ func orderedDeps(m moduleName) []moduleName {
 	result := make([]moduleName, 0, len(uniq))
 
 	// keep looping through all modules until they have all been added to the result.
+	// 遍历所有的modules，直到它们都已经加入result
 
 	for len(result) < len(uniq) {
 	OUTER:
@@ -259,6 +270,7 @@ func orderedDeps(m moduleName) []moduleName {
 			for _, dep := range modules[name].deps {
 				// stop processing this module if one of its dependencies has
 				// not been added to the result yet.
+				// 如果还有依赖没有加入，那么停止对于module的处理
 				if !uniq[dep] {
 					continue OUTER
 				}
@@ -266,6 +278,7 @@ func orderedDeps(m moduleName) []moduleName {
 
 			// if all of the module's dependencies have been added to the result slice,
 			// then we can safely add this module to the result slice as well.
+			// 如果所有module的依赖已经被加入到result slice，那么我们可以安全地将这个module加入到result slice
 			uniq[name] = true
 			result = append(result, name)
 		}

@@ -25,6 +25,7 @@ type Store interface {
 
 // CompositeStore is a Store which delegates to various stores depending
 // on when they were activated.
+// CompositeStore是一个Store，它基于它们active的时间，传递到各个stores中
 type CompositeStore struct {
 	compositeStore
 }
@@ -40,6 +41,7 @@ type compositeStoreEntry struct {
 
 // NewCompositeStore creates a new Store which delegates to different stores depending
 // on time.
+// NewCompositeStore创建一个新的Store，它依赖时间，委托到不同的stores
 func NewCompositeStore() CompositeStore {
 	return CompositeStore{}
 }

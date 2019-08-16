@@ -113,6 +113,7 @@ func (cfg *ProvisionConfig) RegisterFlags(argPrefix string, f *flag.FlagSet) {
 }
 
 // TableManager creates and manages the provisioned throughput on DynamoDB tables
+// TableManager创建并且管理DynamoDB tables的预配吞吐量
 type TableManager struct {
 	client       TableClient
 	cfg          TableManagerConfig

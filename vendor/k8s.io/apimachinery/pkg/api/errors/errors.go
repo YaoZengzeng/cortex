@@ -32,6 +32,7 @@ import (
 const (
 	// StatusTooManyRequests means the server experienced too many requests within a
 	// given window and that the client must wait to perform the action again.
+	// StatusTooManyRequests意味着server在给定的时间窗口获取了太多的请求，client必须等待之后再采取行动
 	StatusTooManyRequests = 429
 )
 

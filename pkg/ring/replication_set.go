@@ -7,6 +7,7 @@ import (
 
 // ReplicationSet describes the ingesters to talk to for a given key, and how
 // many errors to tolerate.
+// ReplicationSet描述了对于给定的key进行对话的ingesters，以及它们能忍受多少errors
 type ReplicationSet struct {
 	Ingesters []IngesterDesc
 	MaxErrors int

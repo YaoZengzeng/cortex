@@ -88,9 +88,11 @@ type Distributor struct {
 	billingClient *billing.Client
 
 	// For handling HA replicas.
+	// 用于处理HA replicas
 	replicas *haTracker
 
 	// Per-user rate limiters.
+	// 对于每个用户的rate limiters
 	ingestLimitersMtx sync.RWMutex
 	ingestLimiters    map[string]*rate.Limiter
 	quit              chan struct{}
@@ -98,6 +100,7 @@ type Distributor struct {
 
 // Config contains the configuration require to
 // create a Distributor
+// Config包含了创建Distributor所需的配置
 type Config struct {
 	EnableBilling bool                       `yaml:"enable_billing,omitempty"`
 	BillingConfig billing.Config             `yaml:"billing,omitempty"`
@@ -113,6 +116,7 @@ type Config struct {
 	ShardByAllLabels bool `yaml:"shard_by_all_labels,omitempty"`
 
 	// for testing
+	// 用于测试
 	ingesterClientFactory client.Factory
 }
 
@@ -123,10 +127,13 @@ func (cfg *Config) RegisterFlags(f *flag.FlagSet) {
 	cfg.HATrackerConfig.RegisterFlags(f)
 
 	f.BoolVar(&cfg.EnableBilling, "distributor.enable-billing", false, "Report number of ingested samples to billing system.")
+	// 优雅地处理来自Prometheus HA replicas的请求
 	f.BoolVar(&cfg.EnableHAReplicas, "distributor.accept-ha-labels", false, "Accept samples from Prometheus HA replicas gracefully (requires labels).")
 	f.DurationVar(&cfg.RemoteTimeout, "distributor.remote-timeout", 2*time.Second, "Timeout for downstream ingesters.")
 	f.DurationVar(&cfg.ExtraQueryDelay, "distributor.extra-query-delay", 0, "Time to wait before sending more than the minimum successful query requests.")
+	// 默认每5min重载一次用户的ingestion limits
 	f.DurationVar(&cfg.LimiterReloadPeriod, "distributor.limiter-reload-period", 5*time.Minute, "Period at which to reload user ingestion limits.")
+	// 根据所有的labels来分发samples，而不仅仅是用user和metric name
 	f.BoolVar(&cfg.ShardByAllLabels, "distributor.shard-by-all-labels", false, "Distribute samples based on all labels, as opposed to solely by user and metric name.")
 }
 
@@ -183,6 +190,7 @@ func (d *Distributor) loop() {
 
 	for {
 		select {
+		// 如果配置了Limit Reload Period的话，每隔设定的时间段就更新一次d.ingestLimiters
 		case <-ticker.C:
 			d.ingestLimitersMtx.Lock()
 			d.ingestLimiters = make(map[string]*rate.Limiter, len(d.ingestLimiters))
@@ -208,10 +216,12 @@ func (d *Distributor) tokenForLabels(userID string, labels []client.LabelAdapter
 		return shardByAllLabels(userID, labels)
 	}
 
+	// 从labels中获取metric name
 	metricName, err := extract.MetricNameFromLabelAdapters(labels)
 	if err != nil {
 		return 0, err
 	}
+	// 根据user id和metric name进行切片
 	return shardByMetricName(userID, metricName), nil
 }
 
@@ -275,7 +285,9 @@ func (d *Distributor) checkSample(ctx context.Context, userID string, ts client.
 }
 
 // Push implements client.IngesterServer
+// Push实现了client.IngesterServer
 func (d *Distributor) Push(ctx context.Context, req *client.WriteRequest) (*client.WriteResponse, error) {
+	// 从ctx中抽取出user ID
 	userID, err := user.ExtractOrgID(ctx)
 	if err != nil {
 		return nil, err
@@ -293,6 +305,7 @@ func (d *Distributor) Push(ctx context.Context, req *client.WriteRequest) (*clie
 
 	// For each timeseries, compute a hash to distribute across ingesters;
 	// check each sample and discard if outside limits.
+	// 对于每个时间序列，计算一个哈希值用于在ingesters之间分发，检查每个sample并且丢弃如果超过了limits
 	validatedTimeseries := make([]client.PreallocTimeseries, 0, len(req.Timeseries))
 	keys := make([]uint32, 0, len(req.Timeseries))
 	numSamples := 0
@@ -303,6 +316,7 @@ func (d *Distributor) Push(ctx context.Context, req *client.WriteRequest) (*clie
 		if removeReplica {
 			removeReplicaLabel(d.limits.HAReplicaLabel(userID), &ts.Labels)
 		}
+		// 计算user以及时序的labels构成的token
 		key, err := d.tokenForLabels(userID, ts.Labels)
 		if err != nil {
 			return nil, err
@@ -313,6 +327,7 @@ func (d *Distributor) Push(ctx context.Context, req *client.WriteRequest) (*clie
 			continue
 		}
 
+		// 获取metric name
 		metricName, _ := extract.MetricNameFromLabelAdapters(ts.Labels)
 		samples := make([]client.Sample, 0, len(ts.Samples))
 		for _, s := range ts.Samples {
@@ -343,23 +358,29 @@ func (d *Distributor) Push(ctx context.Context, req *client.WriteRequest) (*clie
 	if !limiter.AllowN(time.Now(), numSamples) {
 		// Return a 4xx here to have the client discard the data and not retry. If a client
 		// is sending too much data consistently we will unlikely ever catch up otherwise.
+		// 返回4XX告诉client丢弃数据并且不要重试，如果client持续地发送太多的数据，我们可能不能catch up
 		validation.DiscardedSamples.WithLabelValues(validation.RateLimited, userID).Add(float64(numSamples))
 		return nil, httpgrpc.Errorf(http.StatusTooManyRequests, "ingestion rate limit (%v) exceeded while adding %d samples", limiter.Limit(), numSamples)
 	}
 
+	// 每次Push操作都要对keys重新计算rings
 	err = ring.DoBatch(ctx, d.ring, keys, func(ingester ring.IngesterDesc, indexes []int) error {
 		timeseries := make([]client.PreallocTimeseries, 0, len(indexes))
 		for _, i := range indexes {
+			// 获取相应的series
 			timeseries = append(timeseries, validatedTimeseries[i])
 		}
 
 		// Use a background context to make sure all ingesters get samples even if we return early
+		// 使用backgroun context用来确保所有的ingesters获取samples，即使我们过早返回
 		localCtx, cancel := context.WithTimeout(context.Background(), d.cfg.RemoteTimeout)
 		defer cancel()
+		// 在localContext中注入userID
 		localCtx = user.InjectOrgID(localCtx, userID)
 		if sp := opentracing.SpanFromContext(ctx); sp != nil {
 			localCtx = opentracing.ContextWithSpan(localCtx, sp)
 		}
+		// 将一系列的samples注入到ingester中
 		return d.sendSamples(localCtx, ingester, timeseries)
 	})
 	if err != nil {
@@ -369,6 +390,7 @@ func (d *Distributor) Push(ctx context.Context, req *client.WriteRequest) (*clie
 }
 
 func (d *Distributor) getOrCreateIngestLimiter(userID string) *rate.Limiter {
+	// 获取对于某个用户的限速配置
 	d.ingestLimitersMtx.RLock()
 	limiter, ok := d.ingestLimiters[userID]
 	d.ingestLimitersMtx.RUnlock()
@@ -377,6 +399,7 @@ func (d *Distributor) getOrCreateIngestLimiter(userID string) *rate.Limiter {
 		return limiter
 	}
 
+	// 构建limiter
 	limiter = rate.NewLimiter(rate.Limit(d.limits.IngestionRate(userID)), d.limits.IngestionBurstSize(userID))
 
 	d.ingestLimitersMtx.Lock()
@@ -387,15 +410,18 @@ func (d *Distributor) getOrCreateIngestLimiter(userID string) *rate.Limiter {
 }
 
 func (d *Distributor) sendSamples(ctx context.Context, ingester ring.IngesterDesc, timeseries []client.PreallocTimeseries) error {
+	// 根据ingester获取client
 	h, err := d.ingesterPool.GetClientFor(ingester.Addr)
 	if err != nil {
 		return err
 	}
 	c := h.(ingester_client.IngesterClient)
 
+	// 构建WriteRequest
 	req := client.WriteRequest{
 		Timeseries: timeseries,
 	}
+	// 将请求推送给Ingester
 	_, err = c.Push(ctx, &req)
 
 	ingesterAppends.WithLabelValues(ingester.Addr).Inc()

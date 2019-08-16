@@ -6,6 +6,7 @@ import (
 )
 
 // Codec allows KV clients to serialise and deserialise values.
+// Codec允许KV clients来序列化以及反序列化values
 type Codec interface {
 	Decode([]byte) (interface{}, error)
 	Encode(interface{}) ([]byte, error)

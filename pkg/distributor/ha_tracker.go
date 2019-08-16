@@ -37,12 +37,14 @@ const (
 
 // Track the replica we're accepting samples from
 // for each HA cluster we know about.
+// 追踪我们获取samples的replicas，对于每个我们知道的HA cluster
 type haTracker struct {
 	logger log.Logger
 	cfg    HATrackerConfig
 	client kv.Client
 
 	// Replicas we are accepting samples from.
+	// 我们获取samples的Replicas
 	electedLock sync.RWMutex
 	elected     map[string]ReplicaDesc
 	done        chan struct{}
@@ -51,10 +53,12 @@ type haTracker struct {
 
 // HATrackerConfig contains the configuration require to
 // create a HA Tracker.
+// HATrackerConfig包含了创建一个HA Tracker所需的配置
 type HATrackerConfig struct {
 	// We should only update the timestamp if the difference
 	// between the stored timestamp and the time we received a sample at
 	// is more than this duration.
+	// 我们只更新timestamp，如果收到的sample的timestamp和存储的timestamp之间的差别大于这个时间间隔
 	UpdateTimeout time.Duration
 	// We should only failover to accepting samples from a replica
 	// other than the replica written in the KVStore if the difference

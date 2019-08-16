@@ -19,6 +19,7 @@ const (
 )
 
 // Config for a StorageClient
+// StorageClient的配置
 type Config struct {
 	Addresses                string        `yaml:"addresses,omitempty"`
 	Port                     int           `yaml:"port,omitempty"`
@@ -122,6 +123,7 @@ func (cfg *Config) createKeyspace() error {
 }
 
 // StorageClient implements chunk.IndexClient and chunk.ObjectClient for Cassandra.
+// StorageClient实现了对于Cassandra的chunk.IndexClient以及chunk.ObjectClient
 type StorageClient struct {
 	cfg       Config
 	schemaCfg chunk.SchemaConfig
@@ -269,10 +271,12 @@ func (b *readBatchIter) Value() []byte {
 // PutChunks implements chunk.ObjectClient.
 func (s *StorageClient) PutChunks(ctx context.Context, chunks []chunk.Chunk) error {
 	for i := range chunks {
+		// 将chunk的内容进行编码
 		buf, err := chunks[i].Encoded()
 		if err != nil {
 			return errors.WithStack(err)
 		}
+		// 获取chunk的ExternalKey
 		key := chunks[i].ExternalKey()
 		tableName, err := s.schemaCfg.ChunkTableFor(chunks[i].From)
 		if err != nil {
@@ -280,6 +284,7 @@ func (s *StorageClient) PutChunks(ctx context.Context, chunks []chunk.Chunk) err
 		}
 
 		// Must provide a range key, even though its not useds - hence 0x00.
+		// 必须提供一个range key，即使不被使用
 		q := s.session.Query(fmt.Sprintf("INSERT INTO %s (hash, range, value) VALUES (?, 0x00, ?)",
 			tableName), key, buf)
 		if err := q.WithContext(ctx).Exec(); err != nil {

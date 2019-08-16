@@ -28,6 +28,7 @@ const (
 )
 
 // ReadRing represents the read inferface to the ring.
+// ReadRing代表了对于ring的read interface
 type ReadRing interface {
 	prometheus.Collector
 
@@ -44,6 +45,7 @@ type Operation int
 const (
 	Read Operation = iota
 	Write
+	// 特殊的值，用来询问健康
 	Reporting // Special value for inquiring about health
 )
 
@@ -77,6 +79,7 @@ func (cfg *Config) RegisterFlagsWithPrefix(prefix string, f *flag.FlagSet) {
 }
 
 // Ring holds the information about the members of the consistent hash ring.
+// Ring包含了consistent hash ring中的成员的信息
 type Ring struct {
 	name     string
 	cfg      Config
@@ -94,11 +97,14 @@ type Ring struct {
 }
 
 // New creates a new Ring
+// New创建一个新的Ring
 func New(cfg Config, name string) (*Ring, error) {
 	if cfg.ReplicationFactor <= 0 {
+		// ReplicationFactor必须大于0
 		return nil, fmt.Errorf("ReplicationFactor must be greater than zero: %d", cfg.ReplicationFactor)
 	}
 	codec := codec.Proto{Factory: ProtoDescFactory}
+	// 创建KV client
 	store, err := kv.NewClient(cfg.KVStore, codec)
 	if err != nil {
 		return nil, err
@@ -145,13 +151,16 @@ func (r *Ring) Stop() {
 
 func (r *Ring) loop(ctx context.Context) {
 	defer close(r.done)
+	// 对ConsulKey进行持续地监听
 	r.KVClient.WatchKey(ctx, ConsulKey, func(value interface{}) bool {
 		if value == nil {
 			level.Info(util.Logger).Log("msg", "ring doesn't exist in consul yet")
 			return true
 		}
 
+		// 一旦ring发生变更，就更新ringDesc
 		ringDesc := value.(*Desc)
+		// 聚合tokens
 		ringDesc.Tokens = migrateRing(ringDesc)
 		r.mtx.Lock()
 		defer r.mtx.Unlock()
@@ -164,12 +173,15 @@ func (r *Ring) loop(ctx context.Context) {
 func migrateRing(desc *Desc) []TokenDesc {
 	numTokens := len(desc.Tokens)
 	for _, ing := range desc.Ingesters {
+		// 获取ingesters的tokens的总数
 		numTokens += len(ing.Tokens)
 	}
 	tokens := make([]TokenDesc, len(desc.Tokens), numTokens)
+	// 首先拷贝已有的tokens
 	copy(tokens, desc.Tokens)
 	for key, ing := range desc.Ingesters {
 		for _, token := range ing.Tokens {
+			// 再扩展ingester中的tokens
 			tokens = append(tokens, TokenDesc{
 				Token:    token,
 				Ingester: key,
@@ -189,6 +201,8 @@ func (r *Ring) Get(key uint32, op Operation) (ReplicationSet, error) {
 
 // BatchGet returns ReplicationFactor (or more) ingesters which form the replicas
 // for the given keys. The order of the result matches the order of the input.
+// BatchGet返回ReplicationFactor（或者更多）个ingesters，它为给定的keys构建replicas
+// 结果的顺序和输入的顺序匹配
 func (r *Ring) BatchGet(keys []uint32, op Operation) ([]ReplicationSet, error) {
 	r.mtx.RLock()
 	defer r.mtx.RUnlock()
@@ -210,9 +224,11 @@ func (r *Ring) getInternal(key uint32, op Operation) (ReplicationSet, error) {
 	}
 
 	var (
+		// 返回至少ReplicationFactor个ingester
 		n             = r.cfg.ReplicationFactor
 		ingesters     = make([]IngesterDesc, 0, n)
 		distinctHosts = map[string]struct{}{}
+		// 找到key对应的起始的ingester
 		start         = r.search(key)
 		iterations    = 0
 	)
@@ -222,10 +238,12 @@ func (r *Ring) getInternal(key uint32, op Operation) (ReplicationSet, error) {
 		i %= len(r.ringDesc.Tokens)
 
 		// We want n *distinct* ingesters.
+		// 我们想要n个不同的ingesters
 		token := r.ringDesc.Tokens[i]
 		if _, ok := distinctHosts[token.Ingester]; ok {
 			continue
 		}
+		// 从Ingesters中找到合适的ingesters
 		distinctHosts[token.Ingester] = struct{}{}
 		ingester := r.ringDesc.Ingesters[token.Ingester]
 
@@ -235,7 +253,10 @@ func (r *Ring) getInternal(key uint32, op Operation) (ReplicationSet, error) {
 		// size of the replica set for read, but we can read from Leaving ingesters,
 		// so don't skip it in this case.
 		// NB dead ingester will be filtered later (by replication_strategy.go).
+		// 我们不想要写入不处于ACTIVE的Ingesters，但是我们想要写入额外的replica，因此我们增加这个key的set of replicas的大小
+		// 这意味着我们也要增加读的replica set的大小，但是我们可以从Leaving ingesters中读取，因此在这种情况下不要跳过它
 		if op == Write && ingester.State != ACTIVE {
+			// 当ingester不是ACTIVE的时候却要扩展n
 			n++
 		} else if op == Read && (ingester.State != ACTIVE && ingester.State != LEAVING) {
 			n++
@@ -256,6 +277,7 @@ func (r *Ring) getInternal(key uint32, op Operation) (ReplicationSet, error) {
 }
 
 // GetAll returns all available ingesters in the ring.
+// GetAll返回在ring中所有可用的ingesters
 func (r *Ring) GetAll() (ReplicationSet, error) {
 	r.mtx.RLock()
 	defer r.mtx.RUnlock()
@@ -265,10 +287,12 @@ func (r *Ring) GetAll() (ReplicationSet, error) {
 	}
 
 	ingesters := make([]IngesterDesc, 0, len(r.ringDesc.Ingesters))
+	// maxErros为一半的ReplicationFactor
 	maxErrors := r.cfg.ReplicationFactor / 2
 
 	for _, ingester := range r.ringDesc.Ingesters {
 		if !r.IsHealthy(&ingester, Read) {
+			// 有一个unhealthy的，就将maxErros减1
 			maxErrors--
 			continue
 		}
@@ -287,9 +311,11 @@ func (r *Ring) GetAll() (ReplicationSet, error) {
 
 func (r *Ring) search(key uint32) int {
 	i := sort.Search(len(r.ringDesc.Tokens), func(x int) bool {
+		// 找到大于key的token
 		return r.ringDesc.Tokens[x].Token > key
 	})
 	if i >= len(r.ringDesc.Tokens) {
+		// 找到相应的虚拟节点
 		i = 0
 	}
 	return i

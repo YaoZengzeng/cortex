@@ -143,6 +143,7 @@ var _ grpc.ClientConn
 const _ = grpc.SupportPackageIsVersion4
 
 // HealthClient is the client API for Health service.
+// HealthClient是用于Health service的client API
 //
 // For semantics around ctx use and closing/ending streaming RPCs, please refer to https://godoc.org/google.golang.org/grpc#ClientConn.NewStream.
 type HealthClient interface {

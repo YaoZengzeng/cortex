@@ -26,6 +26,7 @@ var clients = promauto.NewGauge(prometheus.GaugeOpts{
 })
 
 // Factory defines the signature for an ingester client factory.
+// Factory定义了一个ingester client factory的签名
 type Factory func(addr string) (grpc_health_v1.HealthClient, error)
 
 // PoolConfig is config for creating a Pool.
@@ -42,6 +43,7 @@ func (cfg *PoolConfig) RegisterFlags(f *flag.FlagSet) {
 }
 
 // Pool holds a cache of grpc_health_v1 clients.
+// Pool代表了grpc_health_v1 clients的缓存
 type Pool struct {
 	cfg     PoolConfig
 	ring    ring.ReadRing
@@ -56,6 +58,7 @@ type Pool struct {
 }
 
 // NewPool creates a new Pool.
+// NewPool创建一个新的Pool
 func NewPool(cfg PoolConfig, ring ring.ReadRing, factory Factory, logger log.Logger) *Pool {
 	p := &Pool{
 		cfg:     cfg,
@@ -80,6 +83,7 @@ func (p *Pool) loop() {
 
 	for {
 		select {
+			// 每隔clean up period都对stale client进行清除
 		case <-cleanupClients.C:
 			p.removeStaleClients()
 			if p.cfg.HealthCheckIngesters {
@@ -106,7 +110,9 @@ func (p *Pool) fromCache(addr string) (grpc_health_v1.HealthClient, bool) {
 
 // GetClientFor gets the client for the specified address. If it does not exist it will make a new client
 // at that address
+// GetClientFor获取指定地址的client，如果不存在，则创建一个该地址的client
 func (p *Pool) GetClientFor(addr string) (grpc_health_v1.HealthClient, error) {
+	// 首先从cache中获取client
 	client, ok := p.fromCache(addr)
 	if ok {
 		return client, nil
@@ -119,6 +125,7 @@ func (p *Pool) GetClientFor(addr string) (grpc_health_v1.HealthClient, error) {
 		return client, nil
 	}
 
+	// 再创建一个client
 	client, err := p.factory(addr)
 	if err != nil {
 		return nil, err
@@ -179,6 +186,7 @@ func (p *Pool) removeStaleClients() {
 		if _, ok := clients[addr]; ok {
 			continue
 		}
+		// 如果注册的地址不在活跃的ingester中，则将它移除
 		level.Info(util.Logger).Log("msg", "removing stale client", "addr", addr)
 		p.RemoveClientFor(addr)
 	}

@@ -14,6 +14,7 @@ const seriesMapShards = 128
 // seriesMap maps fingerprints to memory series. All its methods are
 // goroutine-safe. A seriesMap is effectively is a goroutine-safe version of
 // map[model.Fingerprint]*memorySeries.
+// seriesMap将fingerprints映射到memory series，seriesMap是一个线程安全版本的map[model.Fingerprint]*memorySeries
 type seriesMap struct {
 	size   int32
 	shards []shard
@@ -21,6 +22,7 @@ type seriesMap struct {
 
 type shard struct {
 	mtx sync.Mutex
+	// fingerprint到memorySeries的映射
 	m   map[model.Fingerprint]*memorySeries
 	// Align this struct.
 	pad [cacheLineSize - unsafe.Sizeof(sync.Mutex{}) - unsafe.Sizeof(map[model.Fingerprint]*memorySeries{})]byte
@@ -46,9 +48,12 @@ func newSeriesMap() *seriesMap {
 
 // get returns a memorySeries for a fingerprint. Return values have the same
 // semantics as the native Go map.
+// get返回一个fingerprint的memorySeries，返回的value和原生的Go map有着相同的语义
 func (sm *seriesMap) get(fp model.Fingerprint) (*memorySeries, bool) {
+	// 首先获取对应的shard
 	shard := &sm.shards[util.HashFP(fp)%seriesMapShards]
 	shard.mtx.Lock()
+	// 再从shard中找到memorySeries
 	ms, ok := shard.m[fp]
 	shard.mtx.Unlock()
 	return ms, ok

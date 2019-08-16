@@ -8,6 +8,8 @@ import (
 
 // GenerateTokens make numTokens random tokens, none of which clash
 // with takenTokens.  Assumes takenTokens is sorted.
+// GenerateTokens产生numTokens个随机的tokens，它们中的任何一个都不和takenTokens冲突
+// 假设takenTokens已经排过序了
 func GenerateTokens(numTokens int, takenTokens []uint32) []uint32 {
 	r := rand.New(rand.NewSource(time.Now().UnixNano()))
 	tokens := []uint32{}

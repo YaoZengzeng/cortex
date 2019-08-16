@@ -7,6 +7,7 @@ import (
 
 // Limits describe all the limits for users; can be used to describe global default
 // limits via flags, or per-user limits via yaml config.
+// Limits描述了对于users的所有的limits，可以通过flags描述全局默认的limits，或者通过yaml config限制每个user
 type Limits struct {
 	// Distributor enforced limits.
 	IngestionRate          float64       `yaml:"ingestion_rate"`

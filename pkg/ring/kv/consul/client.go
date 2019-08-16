@@ -80,6 +80,7 @@ func NewClient(cfg Config, codec codec.Codec) (*Client, error) {
 	if err != nil {
 		return nil, err
 	}
+	// 构建一个Consul Client
 	c := &Client{
 		kv:    consulMetrics{client.KV()},
 		codec: codec,

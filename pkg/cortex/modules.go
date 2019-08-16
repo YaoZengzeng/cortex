@@ -37,6 +37,7 @@ import (
 type moduleName int
 
 // The various modules that make up Loki.
+// 用来构建Cotex的各个modules
 const (
 	Ring moduleName = iota
 	Overrides
@@ -133,6 +134,7 @@ func (m *moduleName) Set(s string) error {
 }
 
 func (t *Cortex) initServer(cfg *Config) (err error) {
+	// 根据配置，创建一个新的Server
 	t.server, err = server.New(cfg.Server)
 	return
 }
@@ -143,11 +145,13 @@ func (t *Cortex) stopServer() (err error) {
 }
 
 func (t *Cortex) initRing(cfg *Config) (err error) {
+	// 创建一个新的名字为ingester的ring
 	t.ring, err = ring.New(cfg.Ingester.LifecyclerConfig.RingConfig, "ingester")
 	if err != nil {
 		return
 	}
 	prometheus.MustRegister(t.ring)
+	// 把"/ring"注册到server上
 	t.server.HTTP.Handle("/ring", t.ring)
 	return
 }
@@ -219,13 +223,16 @@ func (t *Cortex) stopQuerier() error {
 
 func (t *Cortex) initIngester(cfg *Config) (err error) {
 	cfg.Ingester.LifecyclerConfig.ListenPort = &cfg.Server.GRPCListenPort
+	// 创建ingesters
 	t.ingester, err = ingester.New(cfg.Ingester, cfg.IngesterClient, t.overrides, t.store)
 	if err != nil {
 		return
 	}
 
+	// 将ingester service注册到server
 	client.RegisterIngesterServer(t.server.GRPC, t.ingester)
 	grpc_health_v1.RegisterHealthServer(t.server.GRPC, t.ingester)
+	// /ready获取ingester的状态
 	t.server.HTTP.Path("/ready").Handler(http.HandlerFunc(t.ingester.ReadinessHandler))
 	t.server.HTTP.Path("/flush").Handler(http.HandlerFunc(t.ingester.FlushHandler))
 	return
@@ -242,6 +249,7 @@ func (t *Cortex) initStore(cfg *Config) (err error) {
 		return
 	}
 
+	// 初始化Store
 	t.store, err = storage.NewStore(cfg.Storage, cfg.ChunkStore, cfg.Schema, t.overrides)
 	return
 }
@@ -387,8 +395,11 @@ func (t *Cortex) stopAlertmanager() error {
 }
 
 type module struct {
+	// module依赖的其他module
 	deps []moduleName
+	// 初始化函数
 	init func(t *Cortex, cfg *Config) error
+	// 停止函数
 	stop func(t *Cortex) error
 }
 
@@ -399,6 +410,7 @@ var modules = map[moduleName]module{
 	},
 
 	Ring: {
+		// Ring依赖Server
 		deps: []moduleName{Server},
 		init: (*Cortex).initRing,
 	},
@@ -409,6 +421,7 @@ var modules = map[moduleName]module{
 	},
 
 	Distributor: {
+		// Distributor依赖Ring，Server以及Overrides
 		deps: []moduleName{Ring, Server, Overrides},
 		init: (*Cortex).initDistributor,
 		stop: (*Cortex).stopDistributor,
@@ -421,6 +434,7 @@ var modules = map[moduleName]module{
 	},
 
 	Ingester: {
+		// Ingester依赖Overrides，Store以及Server
 		deps: []moduleName{Overrides, Store, Server},
 		init: (*Cortex).initIngester,
 		stop: (*Cortex).stopIngester,
@@ -463,6 +477,7 @@ var modules = map[moduleName]module{
 	},
 
 	All: {
+		// All依赖Querier，Ingester，Distributor以及TableManager
 		deps: []moduleName{Querier, Ingester, Distributor, TableManager},
 	},
 }

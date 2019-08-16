@@ -167,6 +167,7 @@ func (o *Overrides) getString(userID string, f func(*Limits) string) string {
 }
 
 // IngestionRate returns the limit on ingester rate (samples per second).
+// IngestionRate返回ingester rate的limit，即每秒的samples的数目
 func (o *Overrides) IngestionRate(userID string) float64 {
 	return o.getFloat(userID, func(l *Limits) float64 {
 		return l.IngestionRate
@@ -181,6 +182,7 @@ func (o *Overrides) IngestionBurstSize(userID string) int {
 }
 
 // AcceptHASamples returns whether the distributor should track and accept samples from HA replicas for this user.
+// AcceptHASamples返回对于某个user，distributor是否需要追踪以及接收来自HA replicas的samples
 func (o *Overrides) AcceptHASamples(userID string) bool {
 	return o.getBool(userID, func(l *Limits) bool {
 		return l.AcceptHASamples
@@ -240,6 +242,7 @@ func (o *Overrides) RejectOldSamplesMaxAge(userID string) time.Duration {
 
 // CreationGracePeriod is misnamed, and actually returns how far into the future
 // we should accept samples.
+// CreationGracePeriod返回多久以后我们应该接收samples
 func (o *Overrides) CreationGracePeriod(userID string) time.Duration {
 	return o.getDuration(userID, func(l *Limits) time.Duration {
 		return l.CreationGracePeriod

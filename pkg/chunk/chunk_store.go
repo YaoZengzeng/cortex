@@ -55,6 +55,7 @@ func init() {
 }
 
 // StoreConfig specifies config for a ChunkStore
+// StoreConfig指定了ChunkStore的配置
 type StoreConfig struct {
 	ChunkCacheConfig       cache.Config `yaml:"chunk_cache_config,omitempty"`
 	WriteDedupeCacheConfig cache.Config `yaml:"write_dedupe_cache_config,omitempty"`

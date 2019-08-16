@@ -37,6 +37,7 @@ import (
 var (
 	errFail = fmt.Errorf("Fail")
 	success = &client.WriteResponse{}
+	// 在ctx中注入org ID
 	ctx     = user.InjectOrgID(context.Background(), "user")
 )
 
@@ -49,6 +50,7 @@ func TestDistributorPush(t *testing.T) {
 		expectedError    error
 	}{
 		// A push of no samples shouldn't block or return error, even if ingesters are sad
+		// 如果push没有samples的话，不应该block或者返回error，即使ingesters都是不可用的
 		{
 			numIngesters:     3,
 			happyIngesters:   0,
@@ -64,6 +66,7 @@ func TestDistributorPush(t *testing.T) {
 		},
 
 		// A push to 2 happy ingesters should succeed
+		// 推送到N/2 + 1才是成功的
 		{
 			numIngesters:     3,
 			happyIngesters:   2,
@@ -88,6 +91,7 @@ func TestDistributorPush(t *testing.T) {
 		},
 
 		// A push exceeding burst size should fail
+		// 超过burst size的推送也是失败的
 		{
 			numIngesters:   3,
 			happyIngesters: 3,
@@ -100,7 +104,9 @@ func TestDistributorPush(t *testing.T) {
 				d := prepare(t, tc.numIngesters, tc.happyIngesters, 0, shardByAllLabels)
 				defer d.Stop()
 
+				// 构建Write Request
 				request := makeWriteRequest(tc.samples)
+				// 将Request推送到Ingester
 				response, err := d.Push(ctx, request)
 				assert.Equal(t, tc.expectedResponse, response)
 				assert.Equal(t, tc.expectedError, err)
@@ -305,6 +311,7 @@ func TestSlowQueries(t *testing.T) {
 
 func prepare(t *testing.T, numIngesters, happyIngesters int, queryDelay time.Duration, shardByAllLabels bool) *Distributor {
 	ingesters := []mockIngester{}
+	// 构建假的ingester
 	for i := 0; i < happyIngesters; i++ {
 		ingesters = append(ingesters, mockIngester{
 			happy:      true,
@@ -317,6 +324,7 @@ func prepare(t *testing.T, numIngesters, happyIngesters int, queryDelay time.Dur
 		})
 	}
 
+	// IngesterDesc描述了Ingester的状态
 	ingesterDescs := []ring.IngesterDesc{}
 	ingestersByAddr := map[string]*mockIngester{}
 	for i := range ingesters {
@@ -344,6 +352,7 @@ func prepare(t *testing.T, numIngesters, happyIngesters int, queryDelay time.Dur
 	var limits validation.Limits
 	var clientConfig client.Config
 	flagext.DefaultValues(&cfg, &limits, &clientConfig)
+	// 设置limit
 	limits.IngestionRate = 20
 	limits.IngestionBurstSize = 20
 	cfg.ingesterClientFactory = factory
@@ -361,6 +370,7 @@ func prepare(t *testing.T, numIngesters, happyIngesters int, queryDelay time.Dur
 
 func makeWriteRequest(samples int) *client.WriteRequest {
 	request := &client.WriteRequest{}
+	// 构建模拟的time series，以及相应的samples
 	for i := 0; i < samples; i++ {
 		ts := client.PreallocTimeseries{
 			TimeSeries: client.TimeSeries{
@@ -437,23 +447,28 @@ func mustEqualMatcher(k, v string) *labels.Matcher {
 
 // mockRing doesn't do virtual nodes, just returns mod(key) + replicationFactor
 // ingesters.
+// mockRing不做virtual nodes，只是返回mod(key) + replicationFactor ingesters
 type mockRing struct {
 	prometheus.Counter
 	ingesters         []ring.IngesterDesc
 	replicationFactor uint32
 }
 
+// 根据key获取它对应的一系列ingester
 func (r mockRing) Get(key uint32, op ring.Operation) (ring.ReplicationSet, error) {
 	result := ring.ReplicationSet{
 		MaxErrors: 1,
 	}
 	for i := uint32(0); i < r.replicationFactor; i++ {
+		// 返回replicationFactor个Ingester
 		n := (key + i) % uint32(len(r.ingesters))
+		// 存在重复
 		result.Ingesters = append(result.Ingesters, r.ingesters[n])
 	}
 	return result, nil
 }
 
+// 获取一系列的key对应的一系列ingester
 func (r mockRing) BatchGet(keys []uint32, op ring.Operation) ([]ring.ReplicationSet, error) {
 	result := []ring.ReplicationSet{}
 	for i := 0; i < len(keys); i++ {
@@ -477,6 +492,7 @@ func (r mockRing) ReplicationFactor() int {
 	return int(r.replicationFactor)
 }
 
+// 模拟的Ingester
 type mockIngester struct {
 	sync.Mutex
 	client.IngesterClient

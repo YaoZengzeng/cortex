@@ -29,6 +29,7 @@ import (
 const userID = "1"
 
 func defaultIngesterTestConfig() Config {
+	// 构建一个内存中的consul client
 	consul := consul.NewInMemoryClient(ring.GetCodec())
 	cfg := Config{}
 	flagext.DefaultValues(&cfg)
@@ -36,6 +37,7 @@ func defaultIngesterTestConfig() Config {
 	cfg.MaxChunkIdle = 99999 * time.Hour
 	cfg.ConcurrentFlushes = 1
 	cfg.LifecyclerConfig.RingConfig.KVStore.Mock = consul
+	// tokens数目为1
 	cfg.LifecyclerConfig.NumTokens = 1
 	cfg.LifecyclerConfig.ListenPort = func(i int) *int { return &i }(0)
 	cfg.LifecyclerConfig.Addr = "localhost"

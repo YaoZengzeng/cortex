@@ -39,6 +39,7 @@ func (p *PreallocWriteRequest) Unmarshal(dAtA []byte) error {
 }
 
 // PreallocTimeseries is a TimeSeries which preallocs slices on Unmarshall.
+// PreallocTimeseries是一个TimeSeries，它会在Unmarshall的时候提前申请slices
 type PreallocTimeseries struct {
 	TimeSeries
 }

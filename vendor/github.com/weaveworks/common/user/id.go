@@ -35,6 +35,7 @@ func ExtractOrgID(ctx context.Context) (string, error) {
 }
 
 // InjectOrgID returns a derived context containing the org ID.
+// InjectOrgID返回包含org ID的派生的context
 func InjectOrgID(ctx context.Context, orgID string) context.Context {
 	return context.WithValue(ctx, interface{}(orgIDContextKey), orgID)
 }

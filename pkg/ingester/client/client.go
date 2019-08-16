@@ -24,6 +24,7 @@ var ingesterClientRequestDuration = promauto.NewHistogramVec(prometheus.Histogra
 }, []string{"operation", "status_code"})
 
 // HealthAndIngesterClient is the union of IngesterClient and grpc_health_v1.HealthClient.
+// HealthAndIngesterClient是IngesterClient和grpc_health_v1.HealthClient的联合
 type HealthAndIngesterClient interface {
 	IngesterClient
 	grpc_health_v1.HealthClient

@@ -45,6 +45,7 @@ func main() {
 	}
 
 	// Parse a second time, as command line flags should take precedent over the config file.
+	// 命令行的flag优先于配置文件
 	flag.Parse()
 
 	// Allocate a block of memory to alter GC behaviour. See https://github.com/golang/go/issues/23044

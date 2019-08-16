@@ -84,6 +84,7 @@ type Config struct {
 	MaxTransferRetries int `yaml:"max_transfer_retries,omitempty"`
 
 	// Config for chunk flushing.
+	// 对于chunk flushing的配置
 	FlushCheckPeriod  time.Duration
 	RetainPeriod      time.Duration
 	MaxChunkIdle      time.Duration
@@ -100,23 +101,29 @@ type Config struct {
 }
 
 // RegisterFlags adds the flags required to config this to the given FlagSet
+// RegisterFlags将需要配置的flags加入给定的FlagSet
 func (cfg *Config) RegisterFlags(f *flag.FlagSet) {
+	// 再对cfg.LifecyclerConfig进行RegisterFlags()
 	cfg.LifecyclerConfig.RegisterFlags(f)
 
 	f.IntVar(&cfg.MaxTransferRetries, "ingester.max-transfer-retries", 10, "Number of times to try and transfer chunks before falling back to flushing.")
 	f.DurationVar(&cfg.FlushCheckPeriod, "ingester.flush-period", 1*time.Minute, "Period with which to attempt to flush chunks.")
+	// chunks在flush之后在内存中保留的时间
 	f.DurationVar(&cfg.RetainPeriod, "ingester.retain-period", 5*time.Minute, "Period chunks will remain in memory after flushing.")
 	f.DurationVar(&cfg.FlushOpTimeout, "ingester.flush-op-timeout", 1*time.Minute, "Timeout for individual flush operations.")
 	f.DurationVar(&cfg.MaxChunkIdle, "ingester.max-chunk-idle", 5*time.Minute, "Maximum chunk idle time before flushing.")
+	// 在flush之前保存的最大的chunk时间
 	f.DurationVar(&cfg.MaxChunkAge, "ingester.max-chunk-age", 12*time.Hour, "Maximum chunk age before flushing.")
 	f.DurationVar(&cfg.ChunkAgeJitter, "ingester.chunk-age-jitter", 20*time.Minute, "Range of time to subtract from MaxChunkAge to spread out flushes")
 	f.BoolVar(&cfg.SpreadFlushes, "ingester.spread-flushes", false, "If true, spread series flushes across the whole period of MaxChunkAge")
+	// flush到dynamodb的并行的goroutine的数目
 	f.IntVar(&cfg.ConcurrentFlushes, "ingester.concurrent-flushes", 50, "Number of concurrent goroutines flushing to dynamodb.")
 	f.DurationVar(&cfg.RateUpdatePeriod, "ingester.rate-update-period", 15*time.Second, "Period with which to update the per-user ingestion rates.")
 }
 
 // Ingester deals with "in flight" chunks.  Based on Prometheus 1.x
 // MemorySeriesStorage.
+// Ingester处理"in flight"的chunks，基于Prometheus 1.x的MemorySeriesStorage
 type Ingester struct {
 	cfg          Config
 	clientConfig client.Config
@@ -135,6 +142,7 @@ type Ingester struct {
 
 	// One queue per flush thread.  Fingerprint is used to
 	// pick a queue.
+	// 每个flush thread一个队列，Fingerprint用于选择一个队列
 	flushQueues     []*util.PriorityQueue
 	flushQueuesDone sync.WaitGroup
 
@@ -143,11 +151,13 @@ type Ingester struct {
 }
 
 // ChunkStore is the interface we need to store chunks
+// ChunkStore是我们用于存储chunks的接口
 type ChunkStore interface {
 	Put(ctx context.Context, chunks []cortex_chunk.Chunk) error
 }
 
 // New constructs a new Ingester.
+// New构建一个新的Ingester
 func New(cfg Config, clientConfig client.Config, limits *validation.Overrides, chunkStore ChunkStore) (*Ingester, error) {
 	if cfg.ingesterClientFactory == nil {
 		cfg.ingesterClientFactory = client.MakeIngesterClient
@@ -162,18 +172,22 @@ func New(cfg Config, clientConfig client.Config, limits *validation.Overrides, c
 		userStates: newUserStates(limits, cfg),
 
 		quit:        make(chan struct{}),
+		// 构建优先级队列
 		flushQueues: make([]*util.PriorityQueue, cfg.ConcurrentFlushes, cfg.ConcurrentFlushes),
 	}
 
 	var err error
+	// 构建ingester的lifecycler
 	i.lifecycler, err = ring.NewLifecycler(cfg.LifecyclerConfig, i, "ingester")
 	if err != nil {
 		return nil, err
 	}
 
 	i.flushQueuesDone.Add(cfg.ConcurrentFlushes)
+	// 默认50个goroutine往dynamodb进行写入
 	for j := 0; j < cfg.ConcurrentFlushes; j++ {
 		i.flushQueues[j] = util.NewPriorityQueue(flushQueueLength)
+		// 构建flush loop，用于推送series
 		go i.flushLoop(j)
 	}
 
@@ -198,6 +212,7 @@ func (i *Ingester) loop() {
 			i.sweepUsers(false)
 
 		case <-rateUpdateTicker.C:
+			// 更新rate
 			i.userStates.updateRates()
 
 		case <-i.quit:
@@ -207,12 +222,15 @@ func (i *Ingester) loop() {
 }
 
 // Shutdown beings the process to stop this ingester.
+// Shutdown用来停止这个ingester
 func (i *Ingester) Shutdown() {
 	// First wait for our flush loop to stop.
+	// 首先等待flush loop结束
 	close(i.quit)
 	i.done.Wait()
 
 	// Next initiate our graceful exit from the ring.
+	// 接着开始从ring里优雅退出
 	i.lifecycler.Shutdown()
 }
 
@@ -261,6 +279,7 @@ func (i *Ingester) append(ctx context.Context, labels labelPairs, timestamp mode
 
 	i.userStatesMtx.RLock()
 	defer i.userStatesMtx.RUnlock()
+	// 根据metric labels获取或者创建series
 	state, fp, series, err := i.userStates.getOrCreateSeries(ctx, labels)
 	if err != nil {
 		return err
@@ -269,7 +288,9 @@ func (i *Ingester) append(ctx context.Context, labels labelPairs, timestamp mode
 		state.fpLocker.Unlock(fp)
 	}()
 
+	// series之前的chunk的数目
 	prevNumChunks := len(series.chunkDescs)
+	// 在series中增加sample
 	if err := series.add(model.SamplePair{
 		Value:     value,
 		Timestamp: timestamp,
@@ -288,6 +309,7 @@ func (i *Ingester) append(ctx context.Context, labels labelPairs, timestamp mode
 	memoryChunks.Add(float64(len(series.chunkDescs) - prevNumChunks))
 	ingestedSamples.Inc()
 	switch source {
+		// source指定了sample来自于RULE还是HTTP API
 	case client.RULE:
 		state.ingestedRuleSamples.inc()
 	case client.API:
@@ -566,6 +588,8 @@ func (i *Ingester) Watch(in *grpc_health_v1.HealthCheckRequest, stream grpc_heal
 // ReadinessHandler is used to indicate to k8s when the ingesters are ready for
 // the addition removal of another ingester. Returns 204 when the ingester is
 // ready, 500 otherwise.
+// ReadinessHandler用来告诉k8s何时ingesters准备好另一个ingester额外的移除，返回204当ingester ready的时候
+// 否则返回500
 func (i *Ingester) ReadinessHandler(w http.ResponseWriter, r *http.Request) {
 	if err := i.lifecycler.CheckReady(r.Context()); err == nil {
 		w.WriteHeader(http.StatusNoContent)

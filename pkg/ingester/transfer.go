@@ -183,6 +183,8 @@ func fromWireChunks(wireChunks []client.Chunk) ([]*desc, error) {
 
 // TransferOut finds an ingester in PENDING state and transfers our chunks to it.
 // Called as part of the ingester shutdown process.
+// TransferOut找到一个处于PENDING状态的ingester并且向它转发chunks
+// 作为ingester的一个结束程序被调用
 func (i *Ingester) TransferOut(ctx context.Context) error {
 	backoff := util.NewBackoff(ctx, util.BackoffConfig{
 		MinBackoff: 100 * time.Millisecond,

@@ -18,6 +18,7 @@ import (
 )
 
 // FSConfig is the config for a FSObjectClient.
+// FSConfig是一个FSObjectClient的配置
 type FSConfig struct {
 	Directory string `yaml:"directory"`
 }
@@ -28,11 +29,13 @@ func (cfg *FSConfig) RegisterFlags(f *flag.FlagSet) {
 }
 
 // FSObjectClient holds config for filesystem as object store
+// FSObjectClient维护了将文件系统作为对象存储的配置
 type FSObjectClient struct {
 	cfg FSConfig
 }
 
 // NewFSObjectClient makes a chunk.ObjectClient which stores chunks as files in the local filesystem.
+// FSObjectClient将chunk作为files保存在本地文件系统中
 func NewFSObjectClient(cfg FSConfig) (*FSObjectClient, error) {
 	if err := ensureDirectory(cfg.Directory); err != nil {
 		return nil, err

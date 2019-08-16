@@ -51,6 +51,7 @@ func (cfg *Config) RegisterFlagsWithPrefix(prefix string, f *flag.FlagSet) {
 // Consul) that exposes operations such as CAS and Watch which take callbacks.
 // It also deals with serialisation by using a Codec and having a instance of
 // the the desired type passed in to methods ala json.Unmarshal.
+// Client是一个KV store的high-level的client（例如Etcd以及Consul）
 type Client interface {
 	// Get a spefic key.  Will use a codec to deserialise key to appropriate type.
 	Get(ctx context.Context, key string) (interface{}, error)
@@ -62,17 +63,23 @@ type Client interface {
 	// with new value etc.  Guarantees that only a single concurrent CAS
 	// succeeds.  Callback can return nil to indicate it is happy with existing
 	// value.
+	// CAS代表Compare-And-Swap，它会用当前的key的value来调用给定的回调函数并且允许回调函数返回一个不同的值
+	// 会用新的值原子地交换当前的值，如果不成功会重试，callback会用新值重试，保证并行的CAS只有一个成功
+	// Callback会返回nil，如果现有的值是OK的话
 	CAS(ctx context.Context, key string, f func(in interface{}) (out interface{}, retry bool, err error)) error
 
 	// WatchKey calls f whenever the value stored under key changes.
+	// WatchKey会在key的value发生变更的时候调用f
 	WatchKey(ctx context.Context, key string, f func(interface{}) bool)
 
 	// WatchPrefix calls f whenever any value stored under prefix changes.
+	// WatchPrefix会在任何底层有着前缀prefix的value变更的时候调用f
 	WatchPrefix(ctx context.Context, prefix string, f func(string, interface{}) bool)
 }
 
 // NewClient creates a new Client (consul, etcd or inmemory) based on the config,
 // encodes and decodes data for storage using the codec.
+// NewClient基于配置创建一个新的Client（consule, etcd或者在内存中的），使用codec编解码存储的数据
 func NewClient(cfg Config, codec codec.Codec) (Client, error) {
 	if cfg.Mock != nil {
 		return cfg.Mock, nil
@@ -91,6 +98,7 @@ func NewClient(cfg Config, codec codec.Codec) (Client, error) {
 	case "inmemory":
 		// If we use the in-memory store, make sure everyone gets the same instance
 		// within the same process.
+		// 如果我们使用内存中的store，确保在同一个进程的每个人都获取到相同的实例
 		inmemoryStoreInit.Do(func() {
 			inmemoryStore = consul.NewInMemoryClient(codec)
 		})

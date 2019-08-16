@@ -2540,6 +2540,7 @@ func NewIngesterClient(cc *grpc.ClientConn) IngesterClient {
 
 func (c *ingesterClient) Push(ctx context.Context, in *WriteRequest, opts ...grpc.CallOption) (*WriteResponse, error) {
 	out := new(WriteResponse)
+	// 调用/cortex.Ingester/Push进行推送
 	err := c.cc.Invoke(ctx, "/cortex.Ingester/Push", in, out, opts...)
 	if err != nil {
 		return nil, err
@@ -2668,6 +2669,7 @@ func (x *ingesterTransferChunksClient) CloseAndRecv() (*TransferChunksResponse, 
 }
 
 // IngesterServer is the server API for Ingester service.
+// IngesterServer是Ingester服务的server API
 type IngesterServer interface {
 	Push(context.Context, *WriteRequest) (*WriteResponse, error)
 	Query(context.Context, *QueryRequest) (*QueryResponse, error)

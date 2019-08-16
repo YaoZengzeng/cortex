@@ -20,6 +20,7 @@ import (
 )
 
 // Config chooses which storage client to use.
+// Config选择使用的storage client
 type Config struct {
 	AWSStorageConfig       aws.StorageConfig  `yaml:"aws"`
 	GCPStorageConfig       gcp.Config         `yaml:"bigtable"`
@@ -47,6 +48,7 @@ func (cfg *Config) RegisterFlags(f *flag.FlagSet) {
 }
 
 // NewStore makes the storage clients based on the configuration.
+// NewStore基于配置创建storage clients
 func NewStore(cfg Config, storeCfg chunk.StoreConfig, schemaCfg chunk.SchemaConfig, limits *validation.Overrides) (chunk.Store, error) {
 	tieredCache, err := cache.New(cfg.IndexQueriesCacheConfig)
 	if err != nil {
@@ -55,6 +57,7 @@ func NewStore(cfg Config, storeCfg chunk.StoreConfig, schemaCfg chunk.SchemaConf
 
 	// Cache is shared by multiple stores, which means they will try and Stop
 	// it more than once.  Wrap in a StopOnce to prevent this.
+	// Cache被多个stores共享，这意味着它会try并且Stop超过一次，因此用StopOnce来封装它
 	tieredCache = cache.StopOnce(tieredCache)
 
 	err = schemaCfg.Load()
@@ -64,6 +67,7 @@ func NewStore(cfg Config, storeCfg chunk.StoreConfig, schemaCfg chunk.SchemaConf
 	stores := chunk.NewCompositeStore()
 
 	for _, s := range schemaCfg.Configs {
+		// 创建期望类型的index client
 		index, err := NewIndexClient(s.IndexType, cfg, schemaCfg)
 		if err != nil {
 			return nil, errors.Wrap(err, "error creating index client")
@@ -74,6 +78,7 @@ func NewStore(cfg Config, storeCfg chunk.StoreConfig, schemaCfg chunk.SchemaConf
 		if objectStoreType == "" {
 			objectStoreType = s.IndexType
 		}
+		// 创建object client
 		chunks, err := NewObjectClient(objectStoreType, cfg, schemaCfg)
 		if err != nil {
 			return nil, errors.Wrap(err, "error creating object client")

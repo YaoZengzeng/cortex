@@ -29,6 +29,7 @@ const _ = proto.GoGoProtoPackageIsVersion2 // please upgrade the proto package
 type IngesterState int32
 
 const (
+	// 有ACTIVE，LEAVING，PENDING和JOINING四个状态
 	ACTIVE  IngesterState = 0
 	LEAVING IngesterState = 1
 	PENDING IngesterState = 2

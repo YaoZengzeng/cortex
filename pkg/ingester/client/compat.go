@@ -19,6 +19,7 @@ import (
 var json = jsoniter.ConfigCompatibleWithStandardLibrary
 
 // ToWriteRequest converts an array of samples into a WriteRequest proto.
+// ToWriteRequest将一个samples的数组转换为一个WriteRequest proto
 func ToWriteRequest(samples []model.Sample, source WriteRequest_SourceEnum) *WriteRequest {
 	req := &WriteRequest{
 		Timeseries: make([]PreallocTimeseries, 0, len(samples)),
@@ -28,6 +29,7 @@ func ToWriteRequest(samples []model.Sample, source WriteRequest_SourceEnum) *Wri
 	for _, s := range samples {
 		ts := PreallocTimeseries{
 			TimeSeries: TimeSeries{
+				// 又重新变为Metric加一系列sample的形式
 				Labels: FromMetricsToLabelAdapters(s.Metric),
 				Samples: []Sample{
 					{

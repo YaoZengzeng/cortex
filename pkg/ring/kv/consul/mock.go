@@ -20,6 +20,7 @@ type mockKV struct {
 }
 
 // NewInMemoryClient makes a new mock consul client.
+// NewInMemoryClient创建一个模拟的consule client
 func NewInMemoryClient(codec codec.Codec) *Client {
 	m := mockKV{
 		kvps: map[string]*consul.KVPair{},

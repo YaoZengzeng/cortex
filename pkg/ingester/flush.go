@@ -58,6 +58,7 @@ var (
 	})
 	memoryChunks = promauto.NewGauge(prometheus.GaugeOpts{
 		Name: "cortex_ingester_memory_chunks",
+		// memoryChunks是当前内存中的chunks总数
 		Help: "The total number of chunks in memory.",
 	})
 	flushReasons = promauto.NewCounterVec(prometheus.CounterOpts{
@@ -81,6 +82,7 @@ func (i *Ingester) Flush() {
 
 // FlushHandler triggers a flush of all in memory chunks.  Mainly used for
 // local testing.
+// FlushHandler触发对于所有memory chunks的flush，主要用于本地测试
 func (i *Ingester) FlushHandler(w http.ResponseWriter, r *http.Request) {
 	i.sweepUsers(true)
 	w.WriteHeader(http.StatusNoContent)
@@ -102,6 +104,7 @@ func (o *flushOp) Priority() int64 {
 }
 
 // sweepUsers periodically schedules series for flushing and garbage collects users with no series
+// sweepUsers阶段性地调度series用于flushing并且在没有series的时候GC users
 func (i *Ingester) sweepUsers(immediate bool) {
 	if i.chunkStore == nil {
 		return
@@ -145,9 +148,11 @@ func (f flushReason) String() string {
 }
 
 // sweepSeries schedules a series for flushing based on a set of criteria
+// sweepSeries调度一个series用于flushing，基于一套标准
 //
 // NB we don't close the head chunk here, as the series could wait in the queue
 // for some time, and we want to encourage chunks to be as full as possible.
+// 我们在这里不关闭head chunk，因为series可能在队列中等待一些时间，我们希望chunks能尽可能地满
 func (i *Ingester) sweepSeries(userID string, fp model.Fingerprint, series *memorySeries, immediate bool) {
 	if len(series.chunkDescs) <= 0 {
 		return
@@ -160,6 +165,7 @@ func (i *Ingester) sweepSeries(userID string, fp model.Fingerprint, series *memo
 	}
 
 	flushQueueIndex := int(uint64(fp) % uint64(i.cfg.ConcurrentFlushes))
+	// 将flushOp入队
 	if i.flushQueues[flushQueueIndex].Enqueue(&flushOp{firstTime, userID, fp, immediate}) {
 		flushReasons.WithLabelValues(flush.String()).Inc()
 		util.Event().Log("msg", "add to flush queue", "userID", userID, "reason", flush, "firstTime", firstTime, "fp", fp, "series", series.metric, "queue", flushQueueIndex)
@@ -172,10 +178,12 @@ func (i *Ingester) shouldFlushSeries(series *memorySeries, fp model.Fingerprint,
 	}
 
 	// Flush if we have more than one chunk, and haven't already flushed the first chunk
+	// 如果我们有多个chunk并且第一个chunk还没有flush就进行flush
 	if len(series.chunkDescs) > 1 && !series.chunkDescs[0].flushed {
 		return reasonMultipleChunksInSeries
 	} else if len(series.chunkDescs) > 0 {
 		// Otherwise look in more detail at the first chunk
+		// 否则更多地关注第一个chunk
 		return i.shouldFlushChunk(series.chunkDescs[0], fp)
 	}
 
@@ -223,12 +231,14 @@ func (i *Ingester) flushLoop(j int) {
 	}()
 
 	for {
+		// 从flush队列中获取对象
 		o := i.flushQueues[j].Dequeue()
 		if o == nil {
 			return
 		}
 		op := o.(*flushOp)
 
+		// flush用户的series
 		err := i.flushUserSeries(j, op.userID, op.fp, op.immediate)
 		if err != nil {
 			level.Error(util.WithUserID(op.userID, util.Logger)).Log("msg", "failed to flush user", "err", err)
@@ -236,6 +246,7 @@ func (i *Ingester) flushLoop(j int) {
 
 		// If we're exiting & we failed to flush, put the failed operation
 		// back in the queue at a later point.
+		// 如果我们正在退出并且flush失败，则在之后将失败的操作重新加入队列
 		if op.immediate && err != nil {
 			op.from = op.from.Add(flushBackoff)
 			i.flushQueues[j].Enqueue(op)
@@ -248,6 +259,7 @@ func (i *Ingester) flushUserSeries(flushQueueIndex int, userID string, fp model.
 		i.preFlushUserSeries()
 	}
 
+	// 获取user state以及对应的series
 	userState, ok := i.userStates.get(userID)
 	if !ok {
 		return nil
@@ -266,6 +278,7 @@ func (i *Ingester) flushUserSeries(flushQueueIndex int, userID string, fp model.
 	}
 
 	// Assume we're going to flush everything, and maybe don't flush the head chunk if it doesn't need it.
+	// 假设我们要flush everything，如果不需要的话就不flush the head chunk
 	chunks := series.chunkDescs
 	if immediate || (len(chunks) > 0 && i.shouldFlushChunk(series.head(), fp) != noFlush) {
 		series.closeHead()
@@ -279,6 +292,7 @@ func (i *Ingester) flushUserSeries(flushQueueIndex int, userID string, fp model.
 	}
 
 	// flush the chunks without locking the series, as we don't want to hold the series lock for the duration of the dynamo/s3 rpcs.
+	// 对chunk进行flush而不锁住series，因为我们不想要在dynamo/s3的rpc期间维护series lock
 	ctx := user.InjectOrgID(context.Background(), userID)
 	ctx, cancel := context.WithTimeout(ctx, i.cfg.FlushOpTimeout)
 	defer cancel() // releases resources if slowOperation completes before timeout elapses
@@ -288,6 +302,7 @@ func (i *Ingester) flushUserSeries(flushQueueIndex int, userID string, fp model.
 	sp.SetTag("organization", userID)
 
 	util.Event().Log("msg", "flush chunks", "userID", userID, "reason", reason, "numChunks", len(chunks), "firstTime", chunks[0].FirstTime, "fp", fp, "series", series.metric, "queue", flushQueueIndex)
+	// 对chunk进行flush
 	err := i.flushChunks(ctx, fp, series.metric, chunks)
 	if err != nil {
 		return err
@@ -340,6 +355,7 @@ func (i *Ingester) flushChunks(ctx context.Context, fp model.Fingerprint, metric
 		wireChunks = append(wireChunks, c)
 	}
 
+	// 将chunk放入chunkStore中
 	if err := i.chunkStore.Put(ctx, wireChunks); err != nil {
 		return err
 	}

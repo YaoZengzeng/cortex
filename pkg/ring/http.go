@@ -71,6 +71,7 @@ func (r *Ring) forget(ctx context.Context, id string) error {
 		}
 
 		ringDesc := in.(*Desc)
+		// 直接将id对应的ingester从ring中移除
 		ringDesc.RemoveIngester(id)
 		return ringDesc, true, nil
 	}
@@ -79,6 +80,7 @@ func (r *Ring) forget(ctx context.Context, id string) error {
 
 func (r *Ring) ServeHTTP(w http.ResponseWriter, req *http.Request) {
 	if req.Method == http.MethodPost {
+		// 从"forget"中获取ingester id
 		ingesterID := req.FormValue("forget")
 		if err := r.forget(req.Context(), ingesterID); err != nil {
 			level.Error(util.WithContext(req.Context(), util.Logger)).Log("msg", "error forgetting ingester", "err", err)
@@ -90,6 +92,7 @@ func (r *Ring) ServeHTTP(w http.ResponseWriter, req *http.Request) {
 		return
 	}
 
+	// 一般用来展示当前ring的状态
 	r.mtx.RLock()
 	defer r.mtx.RUnlock()
 
@@ -106,6 +109,7 @@ func (r *Ring) ServeHTTP(w http.ResponseWriter, req *http.Request) {
 		timestamp := time.Unix(ing.Timestamp, 0)
 		state := ing.State.String()
 		if !r.IsHealthy(&ing, Reporting) {
+			// 对于Reporting这种操作，则超过HearbeatTimeout，状态就为unhealthy
 			state = unhealthy
 		}
 

@@ -35,9 +35,11 @@ func errInvalidChunkID(s string) error {
 }
 
 // Chunk contains encoded timeseries data
+// Chunk包含经过编码的时序数据
 type Chunk struct {
 	// These two fields will be missing from older chunks (as will the hash).
 	// On fetch we will initialise these fields from the DynamoDB key.
+	// 下面两个字段在更老的chunks（以及哈希）中会遗失，在获取的时候我们会从DynamoDB的key中初始化这些字段
 	Fingerprint model.Fingerprint `json:"fingerprint"`
 	UserID      string            `json:"userID"`
 
@@ -54,6 +56,7 @@ type Chunk struct {
 
 	// We never use Delta encoding (the zero value), so if this entry is
 	// missing, we default to DoubleDelta.
+	// 我们从不使用Delta encoding，因此如果这个entry丢失了，我们默认为DoubleDelta
 	Encoding prom_chunk.Encoding `json:"encoding"`
 	Data     prom_chunk.Chunk    `json:"-"`
 

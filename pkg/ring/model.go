@@ -23,6 +23,7 @@ func ProtoDescFactory() proto.Message {
 }
 
 // GetCodec returns the codec used to encode and decode data being put by ring.
+// GetCodec返回用于加解码放入ring中的数据的codec
 func GetCodec() codec.Codec {
 	return codec.Proto{Factory: ProtoDescFactory}
 }
@@ -35,6 +36,7 @@ func NewDesc() *Desc {
 }
 
 // AddIngester adds the given ingester to the ring.
+// AddIngester将给定的ingester加入ring中
 func (d *Desc) AddIngester(id, addr string, tokens []uint32, state IngesterState, normaliseTokens bool) {
 	if d.Ingesters == nil {
 		d.Ingesters = map[string]IngesterDesc{}
@@ -50,6 +52,7 @@ func (d *Desc) AddIngester(id, addr string, tokens []uint32, state IngesterState
 		ingester.Tokens = tokens
 	} else {
 		for _, token := range tokens {
+			// 扩展ring的tokens
 			d.Tokens = append(d.Tokens, TokenDesc{
 				Token:    token,
 				Ingester: id,
@@ -62,6 +65,7 @@ func (d *Desc) AddIngester(id, addr string, tokens []uint32, state IngesterState
 }
 
 // RemoveIngester removes the given ingester and all its tokens.
+// RemoveIngester移除给定的ingester以及它们所有的tokens
 func (d *Desc) RemoveIngester(id string) {
 	delete(d.Ingesters, id)
 	output := []TokenDesc{}
@@ -142,6 +146,7 @@ func (d *Desc) Ready(heartbeatTimeout time.Duration) error {
 	}
 
 	if numTokens == 0 {
+		// ring里面没有token也要返回错误
 		return fmt.Errorf("Not ready: no tokens in ring")
 	}
 	return nil

@@ -49,6 +49,7 @@ type userStates struct {
 }
 
 type userState struct {
+	// 一个用户对应的series
 	limits              *validation.Overrides
 	userID              string
 	fpLocker            *fingerprintLocker
@@ -149,6 +150,8 @@ func (us *userStates) getOrCreateSeries(ctx context.Context, labels []client.Lab
 		// Speculatively create a userState object and try to store it
 		// in the map.  Another goroutine may have got there before
 		// us, in which case this userState will be discarded
+		// 创建一个userState对象并且尝试将它存储在map中，另一个goroutine可能比我们更早到这边
+		// 在这种情况下，userState会被丢弃
 		state = &userState{
 			userID:              userID,
 			limits:              us.limits,

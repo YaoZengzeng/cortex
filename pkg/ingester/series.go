@@ -31,6 +31,7 @@ type memorySeries struct {
 
 	// Whether the current head chunk has already been finished.  If true,
 	// the current head chunk must not be modified anymore.
+	// 标记当前的head chunk是否被关闭，如果为true的话，当前的head chunk不能再被关闭了
 	headChunkClosed bool
 
 	// The timestamp & value of the last sample in this series. Needed to
@@ -61,6 +62,7 @@ func newMemorySeries(m labels.Labels) *memorySeries {
 
 // add adds a sample pair to the series. It returns the number of newly
 // completed chunks (which are now eligible for persistence).
+// add增加一个sample pair到series，它返回最新完成的chunks的数目
 //
 // The caller must have locked the fingerprint of the series.
 func (s *memorySeries) add(v model.SamplePair) error {

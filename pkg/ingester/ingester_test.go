@@ -34,6 +34,7 @@ type testStore struct {
 	chunks map[string][]chunk.Chunk
 }
 
+// newTestStore根据配置创建testStore和Ingester
 func newTestStore(t require.TestingT, cfg Config, clientConfig client.Config, limits validation.Limits) (*testStore, *Ingester) {
 	store := &testStore{
 		chunks: map[string][]chunk.Chunk{},
@@ -58,6 +59,7 @@ func (s *testStore) Put(ctx context.Context, chunks []chunk.Chunk) error {
 	s.mtx.Lock()
 	defer s.mtx.Unlock()
 
+	// 从context中获取user id
 	userID, err := user.ExtractOrgID(ctx)
 	if err != nil {
 		return err
@@ -65,10 +67,12 @@ func (s *testStore) Put(ctx context.Context, chunks []chunk.Chunk) error {
 	for _, chunk := range chunks {
 		for _, v := range chunk.Metric {
 			if v.Value == "" {
+				// chunk的metric labels里面不能有value为""空的
 				return fmt.Errorf("Chunk has blank label %q", v.Name)
 			}
 		}
 	}
+	// 扩展chunks
 	s.chunks[userID] = append(s.chunks[userID], chunks...)
 	return nil
 }
@@ -91,10 +95,12 @@ func buildTestMatrix(numSeries int, samplesPerSeries int, offset int) model.Matr
 	m := make(model.Matrix, 0, numSeries)
 	for i := 0; i < numSeries; i++ {
 		ss := model.SampleStream{
+			// 先构建Metric
 			Metric: model.Metric{
 				model.MetricNameLabel: model.LabelValue(fmt.Sprintf("testmetric_%d", i)),
 				model.JobLabel:        model.LabelValue(fmt.Sprintf("testjob%d", i%2)),
 			},
+			// 再扩展samples
 			Values: make([]model.SamplePair, 0, samplesPerSeries),
 		}
 		for j := 0; j < samplesPerSeries; j++ {
@@ -112,6 +118,7 @@ func buildTestMatrix(numSeries int, samplesPerSeries int, offset int) model.Matr
 func matrixToSamples(m model.Matrix) []model.Sample {
 	var samples []model.Sample
 	for _, ss := range m {
+		// 将Matrix转换为Sample
 		for _, sp := range ss.Values {
 			samples = append(samples, model.Sample{
 				Metric:    ss.Metric,
@@ -149,13 +156,16 @@ func pushTestSamples(t *testing.T, ing *Ingester, numSeries, samplesPerSeries in
 	userIDs := []string{"1", "2", "3"}
 
 	// Create test samples.
+	// 创建test samples
 	testData := map[string]model.Matrix{}
 	for i, userID := range userIDs {
 		testData[userID] = buildTestMatrix(numSeries, samplesPerSeries, i)
 	}
 
 	// Append samples.
+	// 将samples推送到ingester
 	for _, userID := range userIDs {
+		// 将user id注入到ctx中
 		ctx := user.InjectOrgID(context.Background(), userID)
 		_, err := ing.Push(ctx, client.ToWriteRequest(matrixToSamples(testData[userID]), client.API))
 		require.NoError(t, err)
